@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU加速牛顿分形</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 左侧控制面板 */
+        .control-panel {
+            width: 320px;
+            background: #1a1f2e;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #2a3f5f;
+        }
+
+        .control-panel h1 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #4fc3f7;
+            text-align: center;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #252a3a;
+            border-radius: 8px;
+            border: 1px solid #3a4f6f;
+        }
+
+        .section h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #81d4fa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: #b0bec5;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 10px;
+            background: #1a1f2e;
+            border: 1px solid #3a4f6f;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .preset-btn {
+            padding: 8px 12px;
+            background: #2a3f5f;
+            border: 1px solid #3a5f7f;
+            border-radius: 4px;
+            color: #b0e0ff;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: #3a5f7f;
+            border-color: #4fc3f7;
+            transform: translateY(-1px);
+        }
+
+        .render-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #1976d2, #42a5f5);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+
+        .render-btn:hover {
+            background: linear-gradient(135deg, #1565c0, #1e88e5);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+        }
+
+        .export-btn {
+            width: 100%;
+            padding: 10px;
+            background: #2e7d32;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .export-btn:hover {
+            background: #388e3c;
+        }
+
+        /* 右侧WebGL画布 */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+        }
+
+        #fractal-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+
+        #fractal-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* 性能信息 */
+        .perf-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            color: #4fc3f7;
+        }
+
+        /* 加载提示 */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: #4fc3f7;
+        }
+
+        /* 复数公式显示 */
+        .formula-display {
+            background: #1a1f2e;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #81d4fa;
+            margin-top: 10px;
+            border: 1px solid #3a4f6f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧控制面板 -->
+        <div class="control-panel">
+            <h1>GPU加速牛顿分形</h1>
+            
+            <!-- 函数类型选择 -->
+            <div class="section">
+                <h3>函数类型</h3>
+                <div class="form-group">
+                    <select id="function-type">
+                        <option value="polynomial">多项式</option>
+                        <option value="sin">sin(z)</option>
+                        <option value="cos">cos(z)</option>
+                        <option value="exp">exp(z)</option>
+                        <option value="cosh">cosh(z)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 多项式系数 -->
+            <div class="section" id="polynomial-section">
+                <h3>多项式系数</h3>
+                <div class="form-group">
+                    <label>系数 (逗号分隔，从高次到低次)</label>
+                    <input type="text" id="coefficients" value="1,0,0,-1" placeholder="例如: 1,0,0,-1 (z³-1)">
+                </div>
+                <div class="formula-display" id="formula-display">
+                    f(z) = z³ - 1
+                </div>
+            </div>
+
+            <!-- 超越函数参数 -->
+            <div class="section" id="transcendental-section" style="display: none;">
+                <h3>函数参数</h3>
+                <div class="form-group">
+                    <label>常数项</label>
+                    <input type="text" id="trans-constant" value="-1" placeholder="例如: -1">
+                </div>
+            </div>
+
+            <!-- 预设分形 -->
+            <div class="section">
+                <h3>预设分形</h3>
+                <div class="preset-buttons">
+                    <button class="preset-btn" data-preset="z3-1">z³ - 1</button>
+                    <button class="preset-btn" data-preset="z4-1">z⁴ - 1</button>
+                    <button class="preset-btn" data-preset="z5-1">z⁵ - 1</button>
+                    <button class="preset-btn" data-preset="z6-1">z⁶ - 1</button>
+                    <button class="preset-btn" data-preset="sinz-1">sin(z) - 1</button>
+                    <button class="preset-btn" data-preset="cosz-1">cos(z) - 1</button>
+                    <button class="preset-btn" data-preset="expz-1">e^z - 1</button>
+                    <button class="preset-btn" data-preset="coshz-1">cosh(z) - 1</button>
+                </div>
+            </div>
+
+            <!-- 渲染参数 -->
+            <div class="section">
+                <h3>渲染参数</h3>
+                <div class="form-group">
+                    <label>最大迭代次数</label>
+                    <input type="number" id="max-iterations" value="50" min="10" max="200">
+                </div>
+                <div class="form-group">
+                    <label>收敛容忍度</label>
+                    <input type="text" id="tolerance" value="0.001">
+                </div>
+                <div class="form-group">
+                    <label>颜色方案</label>
+                    <select id="color-scheme">
+                        <option value="0">经典彩虹</option>
+                        <option value="1">蓝色渐变</option>
+                        <option value="2">火焰红</option>
+                        <option value="3">绿色森林</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 渲染按钮 -->
+            <button class="render-btn" id="render-btn">重新渲染</button>
+            
+            <!-- 导出功能 -->
+            <button class="export-btn" id="export-btn">导出为PNG</button>
+        </div>
+
+        <!-- 右侧WebGL画布 -->
+        <div class="canvas-container">
+            <canvas id="fractal-canvas"></canvas>
+            <div class="loading" id="loading">初始化WebGL...</div>
+            <div class="perf-info" id="perf-info" style="display: none;">
+                <div>渲染时间: <span id="render-time">0</span>ms</div>
+                <div>FPS: <span id="fps">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入gl-matrix库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+    
+    <!-- 主程序 -->
+    <script type="module" src="index.js"></script>
+</body>
+</html>
